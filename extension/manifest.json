@@ -1,0 +1,82 @@
+{
+  "manifest_version": "0.3",
+  "name": "apple-notes-mcp",
+  "display_name": "Apple Notes",
+  "version": "1.0.0",
+  "description": "Read, search and write Apple Notes through the Notes app",
+  "long_description": "A local MCP server written in Swift that gives Claude access to the Notes app on this Mac.\n\nNotes has no framework a separate process can use, so this server drives Notes.app itself through Apple events. Notes must be running, and the grant appears under System Settings → Privacy & Security → Automation.\n\nNotes are returned as plain text by default rather than HTML: it is what you actually want to read, and it costs a fraction of the tokens.\n\nupdate_note makes you say whether you are appending or replacing. Silently replacing a long note is the mistake worth designing against.\n\nTags and pinning are not here. Notes' scripting dictionary does not expose them at all — they need the Shortcuts server instead.\n\nNot affiliated with or endorsed by Apple Inc.",
+  "author": {
+    "name": "eneko-codes",
+    "url": "https://github.com/eneko-codes"
+  },
+  "homepage": "https://github.com/eneko-codes/apple-notes-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eneko-codes/apple-notes-mcp"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": [
+    "notes",
+    "apple events",
+    "macos",
+    "writing"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/apple-notes-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/apple-notes-mcp",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "notes_status",
+      "description": "Reports whether Notes is running, whether this server may automate it, and what limits are in force. Reads no notes."
+    },
+    {
+      "name": "notes_accounts",
+      "description": "Lists every Notes account — iCloud, On My Mac, an Exchange account — with how many folders each holds."
+    },
+    {
+      "name": "notes_folders",
+      "description": "Lists every folder with its account, its note count, and the path to address it by. Nested folders appear as 'Parent/Child'."
+    },
+    {
+      "name": "notes_search",
+      "description": "Finds notes by text, folder, account and date range. Returns one line per note with its id — never the note's contents. Follow it with note_get."
+    },
+    {
+      "name": "note_get",
+      "description": "Returns one note's text with its folder, dates and attachment count."
+    },
+    {
+      "name": "note_attachments",
+      "description": "Lists what is attached to one note: name, dates, the link a URL attachment points at, and the cid: reference it appears under in the note's HTML."
+    },
+    {
+      "name": "create_note",
+      "description": "Adds a new note to a folder. The note's title is the first line of the body, because that is how Notes works — there is no separate title."
+    },
+    {
+      "name": "update_note",
+      "description": "Changes a note's content. 'mode' is REQUIRED and decides which of two very different things happens:"
+    },
+    {
+      "name": "move_note",
+      "description": "Moves a note into a different folder. Its content is untouched."
+    },
+    {
+      "name": "delete_note",
+      "description": "Deletes a note. Requires confirm=true, and returns the full record it removed — including the text — so what was lost is at least written down somewhere."
+    }
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin"
+    ]
+  }
+}
