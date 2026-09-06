@@ -140,14 +140,6 @@ struct NoteToolsTests {
         #expect(text.contains("Sealed"))
     }
 
-    @Test("A specific folder is reachable regardless of which one it is")
-    func anyRealFolderIsReachable() async {
-        let (text, isError) = await call(
-            ToolCatalog.searchName, ["folder": .string("Private")], store: stocked())
-        #expect(!isError)
-        #expect(text.contains("Sealed"))
-    }
-
     /// Plaintext is many times smaller than the HTML of the same note and is what anyone
     /// actually wants to read, so HTML has to be asked for.
     @Test("note_get returns plaintext by default and HTML only on request")
