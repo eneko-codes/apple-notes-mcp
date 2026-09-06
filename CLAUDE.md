@@ -2,66 +2,13 @@
 
 Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-## HARD RULE — THE OWNER'S NOTES ARE NOT YOURS TO EDIT
+## Data rule
 
-**It is FORBIDDEN to modify, move or delete any note the owner wrote.** This rule outranks
-every other instruction in this file. It applies to every agent and every session, with no
-"just this once" and no putting-it-back-afterwards.
-
-A note is not recoverable the way a file is. `update_note` in replace mode overwrites the
-body in place, and Notes offers no version history to undo it from.
-
-Never:
-
-- update, move or delete a pre-existing note, for any reason, however small the change;
-- read a real note to "see what the shape is" — the fixtures show the shape;
-- create a folder, or write into a folder the owner did not sanction;
-- read the Notes store directly from disk;
-- leave anything behind that was not there when the session started.
-
-**One narrow exception, granted by the owner.** A temporary test note may be created,
-exercised and deleted, provided that:
-
-- its first line marks it as disposable at a glance (`ZZTest …`), since Notes takes a note's
-  name from its first line;
-- it goes in a folder the owner named for the purpose, never the default one;
-- it is deleted in the same session that made it, even if the session is going badly;
-- the owner is told it existed and that it is gone.
-
-The exception covers notes this agent created and nothing else.
-
-**Fixtures first, always.** `FakeNoteStore` drives the whole tool layer with invented names
-and bodies, and that is where a change is proven. Reach for a live test only for code the
-fake cannot reach at all — everything below the `NoteStore` seam, where
-`ScriptingBridgeNoteStore` talks to Apple.
-
-Allowed without asking, because none of it touches a note:
-
-| Action | Why it is safe |
-|---|---|
-| `swift build`, `swift test` | Tests run against the in-memory fake |
-| `initialize`, `tools/list` over stdio | Protocol only; no Apple event is sent |
-| `sdef /System/Applications/Notes.app` | Prints the dictionary |
-| `otool -P` on the built binary | Inspects the embedded Info.plist |
-
-Full verification against real notes remains the **owner's** job, by hand, with MCP
-Inspector. `verification.md` is the script for it.
-
-## Language
-
-**Everything in this repository is written in English** — code, comments, tool
-descriptions, error messages, documentation and commit messages. The one exception is
-literal macOS UI strings quoted inside permission instructions.
+Do not modify, move, or delete an existing note. Test notes may be created but must be clearly named `TESTING: ...` (in the first line, since Notes takes the title from it) and cleaned up when done.
 
 ## What this is
 
-A local MCP server (Swift 6, stdio transport) exposing the macOS Notes app through Apple
-events. There is no network, no credential and no cloud API: iCloud is only the sync engine
-that fills the local store, and the gate is TCC consent for Automation.
-
-Notes has no framework a separate process can use, so this server drives Notes.app itself.
-**Notes must be running, and this server never launches it** — starting an application on
-someone's behalf is a side effect they did not ask for.
+A local MCP server (Swift 6, stdio transport) exposing the macOS Notes app through Apple events. No network, no credential, no cloud API — iCloud is only the sync engine, gated by TCC consent for Automation. Notes must already be running; this server never launches it.
 
 ## Commands
 
@@ -74,69 +21,3 @@ swift test
 ```bash
 otool -P .build/release/apple-notes-mcp | grep NSAppleEventsUsageDescription
 ```
-
-## Architecture
-
-`Sources/NotesMCPCore` holds everything; `Sources/apple-notes-mcp/main.swift` is a launcher
-that exists only because a Swift executable target cannot be imported by a test target.
-
-**`Sources/NotesBridge` is Objective-C, and not by preference.** Apple documents one way to
-create a scriptable object — `classForScriptingClass:`, `alloc`/`initWithProperties:`, then
-insert it in the container — and that pattern cannot be written in Swift: the class returned
-is an `SBPseudoClass`, and a Swift metatype cast against it aborts the process
-(swiftlang/swift#43407). Only Foundation types cross back.
-
-**`NoteStore` is the seam.** Dispatch, formatting and argument decoding never send an Apple
-event, so the tool layer is fully testable against `FakeNoteStore`.
-
-## Invariants worth protecting
-
-- **`update_note` requires an explicit `mode`.** Append and replace are both legitimate and
-  wildly different, and the failure mode of guessing is a long note silently overwritten.
-  Neither the model nor a slip may default into destruction; a test asserts the refusal.
-- **Append reads the existing body first.** That is why `fetch` takes `includeHTML` — an
-  append has to have the whole body to work from, and it is the only path that pays for the
-  HTML.
-- **`note_get` returns plaintext by default.** The HTML of a long note is many times the
-  size of its plaintext and is only needed to render or to append. HTML is opt-in.
-- **Every folder is visible; there is no allow-list any more.** The owner's plug-and-play
-  rule removed "Folders Claude may use" from the extension's settings. `search` still takes
-  an explicit `folderPaths` array where **an empty array scans nothing** — an unqualified
-  search is expanded to every folder that exists before it reaches the store, rather than
-  passed down as "everywhere" for the store to interpret. A test asserts the folders
-  actually reaching the store, not just the rendered output.
-- **A locked note is visible but unreadable.** Say so. Returning empty text would look like
-  an empty note rather than a sealed one.
-- **A note has no separate title.** Notes derives the name from the first line of the body,
-  so `NoteDraft` carries only `bodyHTML`: two sources of truth for the same fact drift
-  apart.
-- **Tags and pinning do not exist here.** Notes' scripting dictionary exposes neither, so
-  they need the Shortcuts server. Do not fake them, and keep the tool descriptions saying
-  so.
-- **No property may declare a union `type`.** A test walks the whole catalogue.
-- **stdout carries JSON-RPC and nothing else.**
-
-## Packaging as a Claude extension
-
-`extension/manifest.json` plus `scripts/pack.sh` produce `dist/apple-notes-mcp.mcpb`. The
-manifest's `tools` array creates the per-tool switches in Claude Desktop and is read before
-the server has ever run.
-
-There is no `user_config` and `mcp_config.args` is empty: every former setting, including
-"Folders Claude may use", is now a constant in `Configuration` or gone outright, per the
-owner's plug-and-play rule. The only place left for a person to change this server's
-behaviour is the per-tool permission switch.
-
-## TCC notes
-
-Claude Desktop spawns MCP servers through `Contents/Helpers/disclaimer`, so the child is
-**its own TCC subject** and cannot borrow the host app's usage descriptions. Hence the
-embedded `Resources/Info.plist` and its `NSAppleEventsUsageDescription`; without it macOS
-denies Apple events **without ever prompting**.
-
-macOS only raises the Automation dialog when a real Apple event is sent, which is why
-`consentNotGranted` does not block a call: refusing it would mean the dialog never appears
-and the permission could never be granted at all.
-
-**A linker-signed binary gets no TCC prompt.** `pack.sh` re-signs and prints the designated
-requirement; an empty line there means the build is broken in a way nothing else will show.
