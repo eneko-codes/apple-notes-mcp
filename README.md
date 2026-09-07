@@ -8,7 +8,7 @@ A local MCP server, written in Swift, exposing the macOS **Notes** app to Claude
 Apple events. It ships as a Claude extension.
 
 Notes has no framework a separate process can use, so this server drives Notes.app itself
-— the same route `apple-mail-mcp` takes for Mail. Notes must be running, and this server
+through Apple events. Notes must be running, and this server
 never launches it: starting an app on your behalf is a side effect you did not ask for.
 There is no network, no credential and no cloud API; iCloud is only the sync engine that
 fills the local store, and the gate is macOS **Automation** consent.
@@ -37,6 +37,21 @@ Not affiliated with or endorsed by Apple Inc.
 | `move_note` | write | Moves a note into a different folder. Content is untouched. |
 | `delete_note` | **destructive** | Deletes a note. Requires `confirm: true`. |
 
+## Frameworks and APIs
+
+Notes ships no framework an external process can use, so everything here is an Apple event.
+
+| Used | For | Reference |
+|---|---|---|
+| ScriptingBridge — `SBApplication`, `SBElementArray`, `SBApplicationDelegate` | Every read and write | [ScriptingBridge](https://developer.apple.com/documentation/scriptingbridge) |
+| `AEDeterminePermissionToAutomateTarget` | Checking Automation consent without sending an event | [Apple Events](https://developer.apple.com/documentation/coreservices/apple_events) |
+| AppKit — `NSWorkspace`, `NSRunningApplication` | Whether Notes is installed, and whether it is running | [AppKit](https://developer.apple.com/documentation/appkit) |
+| `NSAppleEventsUsageDescription` | The consent string macOS shows | [Information Property List](https://developer.apple.com/documentation/bundleresources/information-property-list/nsappleeventsusagedescription) |
+
+Notes' dictionary (`sdef /System/Applications/Notes.app`) holds four classes — `account`,
+`folder`, `note`, `attachment` — and two commands, `show` and `open note location`. Both
+commands only drive the UI, so neither is exposed.
+
 ## The rules worth knowing before you use it
 
 **`note_get` returns plain text by default.** The same note as HTML is several times
@@ -62,8 +77,8 @@ touch one — `update_note` and `delete_note` both refuse it outright, because n
 honestly say what it changed.
 
 **Tags, pinned state and checklist state do not exist here.** Notes' scripting dictionary
-exposes none of them, so this server cannot read or set them — that needs
-`apple-shortcuts-mcp` instead. No tool description implies otherwise.
+exposes none of them, so this server cannot read or set them. No tool description implies
+otherwise.
 
 **Every folder is reachable; there is no allow-list.** `notes_search` still takes an
 explicit `folder` argument, and an unqualified search is expanded to every folder that
@@ -154,15 +169,16 @@ MCPB_HARDENED=1 MCPB_SIGN_IDENTITY="Developer ID Application: …" ./scripts/pac
 That adds the hardened runtime and a secure timestamp, which notarisation requires.
 `pack.sh` applies `Resources/entitlements.plist` automatically when that file is present —
 this repository does not currently ship one, so a hardened build here has not been
-verified against a live Automation grant. `apple-mail-mcp`, which sends Apple events the
-same way, needed `com.apple.security.automation.apple-events` under the hardened runtime;
-check there before shipping a hardened build of this server.
+verified against a live Automation grant. A hardened build that sends Apple events needs
+the `com.apple.security.automation.apple-events` entitlement; add it before shipping one.
 
 ## Tool switches
 
-Plug and play: there is nothing to configure. Every folder is reachable, the scan ceiling,
-text limit and default search page size are fixed constants, and `notes_status` reports
-them so a caller does not have to guess or read the source.
+Plug and play: there is nothing to configure. Every folder is reachable. `Configuration`
+parses `--scan-ceiling`, `--text-limit` and `--search-limit`, but the extension's
+`mcp_config.args` is empty, so as installed the defaults are what you get — they apply only
+if you run the binary yourself with your own arguments. `notes_status` reports the values in
+force.
 
 Every tool can be turned on and off individually, because the bundle declares them all in
 its manifest. That is where policy lives — not in this code. Turning off `create_note`,
@@ -188,8 +204,8 @@ which one answered.
 
 ## Implementation note: why the Apple events are in Objective-C
 
-Every Apple event this project sends lives in the `NotesBridge` Objective-C target, for
-the same reason as its sibling `apple-mail-mcp`. Apple documents exactly one way to create
+Every Apple event this project sends lives in the `NotesBridge` Objective-C target. Apple
+documents exactly one way to create
 a scriptable object — ask the application for the class with `classForScriptingClass:`,
 `alloc`/`initWithProperties:` it, then insert it in the container's element array — and
 that pattern **cannot be written in Swift**. The class that comes back is an
@@ -206,7 +222,7 @@ stops, which folder a note is really in — stays in Swift, where the tests can 
 ## Known limits
 
 - **Tags, pinning and checklist state are not exposed**, and cannot be — Notes' scripting
-  dictionary has no property for any of them. `apple-shortcuts-mcp` is the route to those.
+  dictionary has no property for any of them.
 - **Password-protected notes are read-only in the strictest sense: unreadable.** No tool
   here can see their text, search their text, or write to them at all.
 - **A note cannot move between accounts.** iCloud and On My Mac are separate stores;
@@ -225,12 +241,11 @@ swift build
 swift test
 ```
 
-22 tests, all against an in-memory fake (`FakeNoteStore`) with Notes closed. They need no
+21 tests, all against an in-memory fake (`FakeNoteStore`) with Notes closed. They need no
 permissions and never touch a real note — see `CLAUDE.md`, whose first section is the rule
 that makes that non-negotiable.
 
-Manual verification against a live Notes library is the owner's job; `verification.md` is
-the script for it.
+Manual verification against a live Notes library is the owner's job.
 
 ## Licence
 
