@@ -16,6 +16,18 @@ Do not modify, move or delete an existing note.
 
 A local MCP server (Swift 6, stdio transport) exposing the macOS Notes app through Apple events. No network, no credential, no cloud API — iCloud is only the sync engine, gated by TCC consent for Automation. Notes must already be running; this server never launches it.
 
+## Apple technology
+
+Notes ships no framework an external process can use, so everything is an Apple event. [ScriptingBridge](https://developer.apple.com/documentation/scriptingbridge) — `SBApplication`, `SBElementArray` — for every read and write; `AEDeterminePermissionToAutomateTarget` ([Apple Events](https://developer.apple.com/documentation/coreservices/apple_events)) to check consent without sending an event; [AppKit](https://developer.apple.com/documentation/appkit) `NSWorkspace`/`NSRunningApplication` to see whether the app is there and running. Consent key: [`NSAppleEventsUsageDescription`](https://developer.apple.com/documentation/bundleresources/information-property-list/nsappleeventsusagedescription).
+
+## Native surface not used
+
+`sdef /System/Applications/Notes.app` is the authority on what is possible here. Check it before proposing a tool.
+
+- `show` and `open note location` — both only drive the UI.
+- The application's `selection`, `default account` and `default folder`.
+- Tags, pinned state and checklist state appear in no class at all: the dictionary cannot express them, so no tool can read or set them. Do not add one that claims to.
+
 ## Commands
 
 ```bash
