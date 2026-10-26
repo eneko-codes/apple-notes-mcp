@@ -241,7 +241,7 @@ swift build
 swift test
 ```
 
-21 tests, all against an in-memory fake (`FakeNoteStore`) with Notes closed. They need no
+The tests run entirely against an in-memory fake (`FakeNoteStore`) with Notes closed. They need no
 permissions and never touch a real note — see `CLAUDE.md`, whose first section is the rule
 that makes that non-negotiable.
 
