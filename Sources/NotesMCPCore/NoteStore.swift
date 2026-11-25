@@ -40,18 +40,23 @@ public protocol NoteStore: Sendable {
     /// Every account with its whole folder tree, flattened to paths.
     func accounts() async throws -> [AccountInfo]
 
-    /// Walks `folderPaths` in order and returns what matched.
+    /// Walks `folders` in order and returns every note that matched among those it
+    /// looked at.
     ///
     /// The folder list is always explicit and never means "everywhere": an empty array
-    /// scans nothing. A scope that fails open is worse than one that errors, and this is
-    /// the only place the configured folder allow-list could leak.
+    /// scans nothing. A scope that fails open is worse than one that errors. Each folder
+    /// is addressed by its account and its path together, because two accounts routinely
+    /// hold the same path and a path alone would walk one of them twice.
     ///
     /// `scanCeiling` is passed per call rather than held by the store so that the value
     /// the tools enforce and the value `notes_status` reports cannot be two numbers.
+    /// `timeBudget` is how long the walk may go on before it stops and reports what it has:
+    /// Notes does the reading, one Apple event after another, and nothing else bounds how
+    /// long a large folder takes.
     func search(
-        query: String?, folderPaths: [String], account: String?, from: Date?, to: Date?,
-        dateField: NoteDateField, limit: Int, scanCeiling: Int
-    ) async throws -> NoteSearchPage
+        query: String?, folders: [FolderInfo], from: Date?, to: Date?,
+        dateField: NoteDateField, scanCeiling: Int, timeBudget: Duration
+    ) async throws -> NoteScan
 
     /// `includeHTML` is opt-in because the HTML of a long note is many times the size of
     /// its plaintext and is only needed to render or to append.

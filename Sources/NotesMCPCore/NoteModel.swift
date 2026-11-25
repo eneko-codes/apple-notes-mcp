@@ -135,24 +135,33 @@ public struct AttachmentInfo: Sendable, Equatable {
     }
 }
 
-public struct NoteSearchPage: Sendable, Equatable {
-    public let results: [NoteSummary]
-    public let total: Int
+/// What one walk of the folders found.
+public struct NoteScan: Sendable, Equatable {
+    /// Every note that matched among those looked at, in no particular order: the tool
+    /// layer sorts and pages them, where a test can reach both.
+    public let matches: [NoteSummary]
+    /// How many notes the walk looked at, matching or not.
+    public let scanned: Int
     /// True when the walk stopped at the scan ceiling rather than exhausting the folders.
-    /// Distinct from `total`: it means "there may be notes I never looked at", which
-    /// silence would misrepresent.
+    /// It means "there may be notes I never looked at", which silence would misrepresent.
     public let hitScanLimit: Bool
+    /// True when the walk stopped because its time budget ran out.
+    public let reachedTimeLimit: Bool
 
-    public init(results: [NoteSummary], total: Int, hitScanLimit: Bool = false) {
-        self.results = results
-        self.total = total
+    public init(
+        matches: [NoteSummary], scanned: Int, hitScanLimit: Bool = false,
+        reachedTimeLimit: Bool = false
+    ) {
+        self.matches = matches
+        self.scanned = scanned
         self.hitScanLimit = hitScanLimit
+        self.reachedTimeLimit = reachedTimeLimit
     }
 }
 
 /// Which of the two dates a search range applies to. Both are real Notes properties, so
 /// filtering on either is a filter rather than a judgement.
-public enum NoteDateField: String, Sendable, Equatable {
+public enum NoteDateField: String, Sendable, Equatable, CaseIterable {
     case modified
     case created
 }
@@ -162,7 +171,7 @@ public enum NoteDateField: String, Sendable, Equatable {
 /// Required on the tool, with no default. Replacing a long note by accident is this
 /// server's most expensive possible mistake — Notes keeps no version history a script can
 /// reach — and a default would make it the outcome of forgetting an argument.
-public enum UpdateMode: String, Sendable, Equatable {
+public enum UpdateMode: String, Sendable, Equatable, CaseIterable {
     case append
     case replace
 }

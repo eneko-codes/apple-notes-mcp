@@ -53,8 +53,9 @@ typedef NS_ERROR_ENUM(NotesBridgeErrorDomain, NotesBridgeError){
 /// Notes folders nest and a bare name is not enough to say which one you meant.
 + (nullable NSArray<NSDictionary<NSString *, id> *> *)accountsWithError:(NSError **)error;
 
-/// Walks the folders whose account and path are given and returns
-/// `{scanned, notes: [{id, name, folderPath, account, creationDate, modificationDate,
+/// Walks the folders given, each by its path and the name of its account at the same
+/// index of `accounts`, and returns
+/// `{scanned, hitLimit, timedOut, notes: [{id, name, folderPath, account, creationDate, modificationDate,
 /// passwordProtected, shared, plaintext}]}`.
 ///
 /// A date bound is pushed into Notes as a `whose` clause rather than applied here:
@@ -63,16 +64,25 @@ typedef NS_ERROR_ENUM(NotesBridgeErrorDomain, NotesBridgeError){
 /// bound applies to. `needsText` decides whether `plaintext` is fetched at all — it is one
 /// more Apple event per note, and it is only needed when the caller is matching text.
 ///
-/// `maxScan` bounds the walk; `scanned` reports how far it actually got, which is what
-/// lets the caller say a result was truncated.
+/// `maxScan` bounds the walk; `scanned` reports how far it actually got, and `hitLimit` is
+/// YES when a folder or a note was left unwalked because of it, which is what lets the
+/// caller say a result was truncated.
+///
+/// `timeBudget`, in seconds, bounds it a second way: the walk stops before the next folder
+/// or note once that long has passed, and `timedOut` is then YES. It is checked between
+/// Apple events, so the walk overruns by at most the one event in flight.
+///
+/// The account comes with every path because a path alone does not say which folder is
+/// meant: two accounts routinely both have a "Notes".
 + (nullable NSDictionary<NSString *, id> *)
     scanFolderPaths:(NSArray<NSString *> *)folderPaths
-          inAccount:(nullable NSString *)account
+         inAccounts:(NSArray<NSString *> *)accounts
            fromDate:(nullable NSDate *)fromDate
              toDate:(nullable NSDate *)toDate
     useCreationDate:(BOOL)useCreationDate
           needsText:(BOOL)needsText
             maxScan:(NSInteger)maxScan
+         timeBudget:(NSTimeInterval)timeBudget
               error:(NSError **)error;
 
 /// One note, or nil with `NotesBridgeErrorNoteNotFound` if that id no longer resolves.
