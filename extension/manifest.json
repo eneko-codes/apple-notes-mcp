@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "apple-notes-mcp",
   "display_name": "Apple Notes",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Read, search and write Apple Notes through the Notes app",
-  "long_description": "A local MCP server written in Swift that gives Claude access to the Notes app on this Mac.\n\nNotes has no framework a separate process can use, so this server drives Notes.app itself through Apple events. Notes must be running, and the grant appears under System Settings → Privacy & Security → Automation.\n\nNotes are returned as plain text by default rather than HTML: it is what you actually want to read, and it costs a fraction of the tokens.\n\nupdate_note makes you say whether you are appending or replacing. Silently replacing a long note is the mistake worth designing against.\n\nTags and pinning are not here. Notes' scripting dictionary does not expose them at all — they need the Shortcuts server instead.\n\nNot affiliated with or endorsed by Apple Inc.",
+  "long_description": "A local MCP server written in Swift that gives Claude access to the Notes app on this Mac.\n\nNotes has no framework a separate process can use, so this server drives Notes.app itself through Apple events. Notes must be running, and the grant appears under System Settings → Privacy & Security → Automation.\n\nEvery result is bounded. Lists of accounts, folders, notes and attachments come one page at a time, and a note comes as its first 10000 characters; each result says in its first lines what it left out and what to pass for the rest. A search looks at no more than 500 notes and for no longer than 45 seconds, and says so when it stops early. A call that has not finished after 120 seconds is answered with an error.\n\nNotes are returned as plain text by default rather than HTML: it is what you actually want to read, and it costs a fraction of the tokens.\n\nupdate_note makes you say whether you are appending or replacing. Silently replacing a long note is the mistake worth designing against.\n\nTags and pinning are not here. Notes' scripting dictionary does not expose them at all — they need the Shortcuts server instead.\n\nNot affiliated with or endorsed by Apple Inc.",
   "author": {
     "name": "eneko-codes",
     "url": "https://github.com/eneko-codes"
@@ -38,23 +38,23 @@
     },
     {
       "name": "notes_accounts",
-      "description": "Lists every Notes account — iCloud, On My Mac, an Exchange account — with how many folders each holds."
+      "description": "Lists the Notes accounts — iCloud, On My Mac, an Exchange account — 50 to a page in name order, with how many folders each holds. Pass limit and offset for more."
     },
     {
       "name": "notes_folders",
-      "description": "Lists every folder with its account, its note count, and the path to address it by. Nested folders appear as 'Parent/Child'."
+      "description": "Lists the folders, 100 to a page ordered by account, then path, each with its note count and the path to address it by. Nested folders appear as 'Parent/Child'. Pass limit and offset for more."
     },
     {
       "name": "notes_search",
-      "description": "Finds notes by text, folder, account and date range. Returns one line per note with its id — never the note's contents. Follow it with note_get."
+      "description": "Finds notes by text, folder, account and date (from_date, to_date) and returns 25 to a page, the most recently modified first: one line per note with its id, never the note's contents. Pass limit and offset for more; follow it with note_get."
     },
     {
       "name": "note_get",
-      "description": "Returns one note's text with its folder, dates and attachment count."
+      "description": "Returns one note: its folder, dates and attachment count, then the first 10000 characters of its text, as plain text. Pass character_offset and max_characters to read a longer note one window at a time."
     },
     {
       "name": "note_attachments",
-      "description": "Lists what is attached to one note: name, dates, the link a URL attachment points at, and the cid: reference it appears under in the note's HTML."
+      "description": "Lists what is attached to one note, 20 to a page, the first added first: name, dates, the link a URL attachment points at, and the cid: reference it appears under in the note's HTML. Pass limit and offset for more."
     },
     {
       "name": "create_note",
@@ -62,7 +62,7 @@
     },
     {
       "name": "update_note",
-      "description": "Changes a note's content. 'mode' is REQUIRED and decides which of two very different things happens:"
+      "description": "Changes a note's content. 'mode' is REQUIRED: append adds to the end, replace discards the whole note and writes the new text instead."
     },
     {
       "name": "move_note",
@@ -70,7 +70,7 @@
     },
     {
       "name": "delete_note",
-      "description": "Deletes a note. Requires confirm=true, and returns the full record it removed — including the text — so what was lost is at least written down somewhere."
+      "description": "Deletes a note. Requires confirm=true, and returns the record it removed with the first 10000 characters of its text, so what was lost is at least written down somewhere."
     }
   ],
   "compatibility": {

@@ -14,18 +14,18 @@ public struct Configuration: Sendable, Equatable {
     /// complete and much slower: Notes, not this process, does the reading.
     public var scanCeiling: Int = 500
 
-    /// Default truncation for the text `note_get` returns. The tool's own `text_limit`
-    /// still wins.
-    public var textLimit: Int = 8_000
+    /// How many characters of a note `note_get` returns when `max_characters` is not
+    /// passed. The tool's own argument still wins.
+    public var textLimit: Int = ToolStandard.usualPage
 
     /// Default page size for `notes_search`.
     public var searchLimit: Int = 25
 
     public init() {}
 
+    /// The other two ranges are those of the tool arguments these settings are the
+    /// defaults of, so they live with the arguments in `ToolCatalog`.
     public static let scanCeilingRange = 50...5_000
-    public static let textLimitRange = 200...100_000
-    public static let searchLimitRange = 1...100
 
     /// True when an argument is an unsubstituted manifest placeholder.
     ///
@@ -61,11 +61,11 @@ public struct Configuration: Sendable, Equatable {
                 index += 2
 
             case "--text-limit":
-                if let number = clamped(textLimitRange) { configuration.textLimit = number }
+                if let number = clamped(ToolCatalog.maxCharactersRange) { configuration.textLimit = number }
                 index += 2
 
             case "--search-limit":
-                if let number = clamped(searchLimitRange) { configuration.searchLimit = number }
+                if let number = clamped(ToolCatalog.searchLimitRange) { configuration.searchLimit = number }
                 index += 2
 
             default:

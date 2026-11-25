@@ -27,15 +27,15 @@ Not affiliated with or endorsed by Apple Inc.
 | Tool | Kind | What it does |
 |---|---|---|
 | `notes_status` | read | Reports whether Notes is running, whether this server may automate it, and what limits are in force. Reads no notes. |
-| `notes_accounts` | read | Every Notes account — iCloud, On My Mac, an Exchange account — with how many folders each holds. |
-| `notes_folders` | read | Every folder, with its account, note count, and the path to address it by. Nested folders read `Parent/Child`. |
-| `notes_search` | read | Finds notes by text, folder, account and date range. Returns one line per note with its id — never the note's contents. |
-| `note_get` | read | One note's text with its folder, dates and attachment count. Plain text by default; `html=true` for markup. |
-| `note_attachments` | read | What is attached to one note: name, dates, a URL attachment's link, and the `cid:` reference it appears under in the note's HTML. |
+| `notes_accounts` | read | The Notes accounts — iCloud, On My Mac, an Exchange account — in name order, with how many folders each holds. Paged with `limit` and `offset`. |
+| `notes_folders` | read | The folders, ordered by account, then path, with their note count and the path to address each by. Nested folders read `Parent/Child`. Paged with `limit` and `offset`. |
+| `notes_search` | read | Finds notes by text, folder, account and date (`from_date`, `to_date`). Returns one line per note with its id, the most recently modified first — never the note's contents. Paged with `limit` and `offset`. |
+| `note_get` | read | One note's folder, dates and attachment count, then a window of its text: `character_offset` and `max_characters`. Plain text by default; `html=true` for markup. |
+| `note_attachments` | read | What is attached to one note, the first added first: name, dates, a URL attachment's link, and the `cid:` reference it appears under in the note's HTML. Paged with `limit` and `offset`. |
 | `create_note` | write | Adds a new note to a folder. |
 | `update_note` | write | Changes a note's content. `mode` is required: `append` or `replace`. |
 | `move_note` | write | Moves a note into a different folder. Content is untouched. |
-| `delete_note` | **destructive** | Deletes a note. Requires `confirm: true`. |
+| `delete_note` | **destructive** | Deletes a note. Requires `confirm: true`. The receipt repeats the start of the text it removed. |
 
 ## Frameworks and APIs
 
@@ -83,12 +83,48 @@ otherwise.
 **Every folder is reachable; there is no allow-list.** `notes_search` still takes an
 explicit `folder` argument, and an unqualified search is expanded to every folder that
 exists before it reaches Notes — never passed down as "everywhere" for Notes to interpret.
+Each folder goes to Notes with its account, because two accounts routinely both have a
+`Notes`: a `folder` that several accounts have is searched in each of them unless `account`
+names one, and the rows then say which account a note is in.
 
 **Searches are slow, and bounded on purpose.** Notes.app itself walks the library and
 ships each result back over the Apple event boundary, so an unfiltered search over a large
-library is genuinely slow. It also stops at a scan ceiling (`notes_status` reports the
-current value) and says so in the result when it does — a truncated answer never comes
-back looking like a complete one. Narrow a search by folder or date when you can.
+library is genuinely slow. A search looks at no more than a ceiling of notes (500) and for
+no longer than 45 seconds, and says so in the first lines of the result when it stops
+early — a truncated answer never comes back looking like a complete one. Notes it never
+looked at are not in the result, and the most recent of the notes it did look at is not
+necessarily the most recent in the library: narrow by `folder`, `from_date` or `to_date`
+and search again.
+
+## How much a result holds
+
+No result is longer than 40,000 characters, and a call with no optional argument returns
+about 10,000 or less. Whatever a result leaves out is said in its first lines, in a fixed
+wording, with the arguments that return the rest.
+
+| Tool | With no optional argument | The rest |
+|---|---|---|
+| `notes_accounts` | 50 accounts, by name | `limit` (up to 200), `offset` |
+| `notes_folders` | 100 folders, by account, then path | `limit` (up to 300), `offset` |
+| `notes_search` | 25 notes, newest modification first | `limit` (up to 100), `offset`; `from_date` and `to_date`, both inclusive |
+| `note_get` | the first 10,000 characters of the text | `character_offset`, `max_characters` (up to 30,000) |
+| `note_attachments` | 20 attachments, first added first | `limit` (up to 100), `offset` |
+| `delete_note` | the first 10,000 characters of the text it removed | nothing: read the note with `note_get` first if the whole text has to be kept |
+
+`Showing 1–25 of 312 notes. Pass offset=25 for the next page.` is what a page says;
+`Text: characters 1–10000 of 52000. Pass character_offset=10000 for the rest.` is what a
+window says. A title longer than 60 characters is clipped in a search row, and the result
+says so. A size or a count outside its range is moved to the nearest allowed value and the
+result says which was used; a value of the wrong type, a day that does not exist and a
+range that ends before it starts are refused.
+
+A call that has not finished after 120 seconds is answered with an error and abandoned.
+For a tool that reads, nothing was changed. For a tool that writes, the Apple event may
+already have reached Notes, so the error says to look before trying again.
+
+**Renamed in 2.0.0.** `notes_search` takes `from_date` and `to_date` where it took `from`
+and `to`, and `note_get` takes `max_characters` where it took `text_limit`. The old names
+are no longer read.
 
 ## Install
 
@@ -175,7 +211,9 @@ the `com.apple.security.automation.apple-events` entitlement; add it before ship
 ## Tool switches
 
 Plug and play: there is nothing to configure. Every folder is reachable. `Configuration`
-parses `--scan-ceiling`, `--text-limit` and `--search-limit`, but the extension's
+parses `--scan-ceiling` (how many notes a search looks at), `--text-limit` (how many
+characters `note_get` returns when `max_characters` is not passed) and `--search-limit`
+(the page of `notes_search` when `limit` is not passed), but the extension's
 `mcp_config.args` is empty, so as installed the defaults are what you get — they apply only
 if you run the binary yourself with your own arguments. `notes_status` reports the values in
 force.
@@ -227,8 +265,10 @@ stops, which folder a note is really in — stays in Swift, where the tests can 
   here can see their text, search their text, or write to them at all.
 - **A note cannot move between accounts.** iCloud and On My Mac are separate stores;
   `move_note` refuses a cross-account move rather than attempting a copy.
-- **Search stops at a scan ceiling** (`notes_status` reports the current value) because
-  Notes, not this process, does the walking. A truncated result says so.
+- **Search stops at a scan ceiling and at a time budget** (`notes_status` reports both)
+  because Notes, not this process, does the walking. A truncated result says so first.
+- **The receipt of a deletion holds only the start of a long note's text.** The note is
+  gone by then, so the rest cannot be read through this server.
 - **Attachments are listed, not fetched.** Saving one to disk needs a filesystem scope
   this server does not have.
 - **Identifiers are not durable across a resync.** Look a note up again with

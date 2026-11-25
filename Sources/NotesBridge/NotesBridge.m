@@ -212,27 +212,50 @@ static NSString *const FolderPathSeparator = @"/";
 
 + (nullable NSDictionary<NSString *, id> *)
     scanFolderPaths:(NSArray<NSString *> *)folderPaths
-          inAccount:(nullable NSString *)accountName
+         inAccounts:(NSArray<NSString *> *)accounts
            fromDate:(nullable NSDate *)fromDate
              toDate:(nullable NSDate *)toDate
     useCreationDate:(BOOL)useCreationDate
           needsText:(BOOL)needsText
             maxScan:(NSInteger)maxScan
+         timeBudget:(NSTimeInterval)timeBudget
               error:(NSError **)error {
     SBApplication<NotesApplication> *application = [self applicationWithError:error];
     if (!application) return nil;
+    if (accounts.count != folderPaths.count) {
+        if (error) {
+            *error = [self errorWithCode:NotesBridgeErrorAccountNotFound
+                                 message:@"A folder to search was given without its account."];
+        }
+        return nil;
+    }
 
     NSInteger remaining = maxScan;
     NSMutableArray<NSDictionary<NSString *, id> *> *notes = [NSMutableArray array];
 
-    for (NSString *path in folderPaths) {
-        if (remaining <= 0) break;
+    // Time since boot, not the wall clock: a clock set back mid-walk must not extend it.
+    NSTimeInterval deadline = NSProcessInfo.processInfo.systemUptime + timeBudget;
+    BOOL timedOut = NO;
+    // Set only when something was left unwalked, so that a library of exactly `maxScan`
+    // notes is not reported as cut short.
+    BOOL hitLimit = NO;
 
-        NSString *resolvedAccount = accountName ?: @"";
+    for (NSUInteger index = 0; index < folderPaths.count; index++) {
+        if (remaining <= 0) {
+            hitLimit = YES;
+            break;
+        }
+        if (NSProcessInfo.processInfo.systemUptime >= deadline) {
+            timedOut = YES;
+            break;
+        }
+
+        NSString *path = folderPaths[index];
+        NSString *accountName = accounts[index];
         id<NotesFolder> folder = [self folderAtPath:path
                                           inAccount:accountName
                                       ofApplication:application
-                                        accountName:&resolvedAccount];
+                                        accountName:NULL];
         // A path that no longer resolves is skipped rather than fatal: the caller asked
         // for several folders and one having been renamed should not lose the rest.
         if (!folder) continue;
@@ -263,15 +286,27 @@ static NSString *const FolderPathSeparator = @"/";
         }
 
         for (id<NotesNote> note in candidates) {
-            if (remaining <= 0) break;
+            if (remaining <= 0) {
+                hitLimit = YES;
+                break;
+            }
+            if (NSProcessInfo.processInfo.systemUptime >= deadline) {
+                timedOut = YES;
+                break;
+            }
             remaining -= 1;
             [notes addObject:[self summaryOfNote:note
                                       folderPath:path
-                                         account:resolvedAccount
+                                         account:accountName
                                        needsText:needsText]];
         }
     }
-    return @{@"scanned": @(maxScan - remaining), @"notes": notes};
+    return @{
+        @"scanned": @(maxScan - remaining),
+        @"hitLimit": @(hitLimit),
+        @"timedOut": @(timedOut),
+        @"notes": notes,
+    };
 }
 
 /// Resolves one note by its identifier.

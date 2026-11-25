@@ -11,8 +11,8 @@ import NotesBridge
 /// The Apple events themselves live in the `NotesBridge` Objective-C target; see its
 /// header for why they cannot live in Swift. What stays here is the mapping between
 /// Notes' loose dictionaries and this server's value types, plus the decisions the bridge
-/// deliberately does not make: how a query matches, in what order results come back, and
-/// which folder a note is really in.
+/// deliberately does not make: how a query matches and which folder a note is really in.
+/// The order results come back in, and how many, belong to the tool layer.
 public struct ScriptingBridgeNoteStore: NoteStore {
     public static let bundleIdentifier = "com.apple.Notes"
 
@@ -98,25 +98,25 @@ public struct ScriptingBridgeNoteStore: NoteStore {
     // MARK: Search
 
     public func search(
-        query: String?, folderPaths: [String], account: String?, from: Date?, to: Date?,
-        dateField: NoteDateField, limit: Int, scanCeiling: Int
-    ) async throws -> NoteSearchPage {
+        query: String?, folders: [FolderInfo], from: Date?, to: Date?,
+        dateField: NoteDateField, scanCeiling: Int, timeBudget: Duration
+    ) async throws -> NoteScan {
         try guardAvailability()
         // An empty folder list means nothing was in scope. Treating it as "everywhere"
         // would turn a restriction into its opposite.
-        guard !folderPaths.isEmpty else {
-            return NoteSearchPage(results: [], total: 0, hitScanLimit: false)
-        }
+        guard !folders.isEmpty else { return NoteScan(matches: [], scanned: 0) }
 
+        let budget = timeBudget.components
         let page: [String: Any]
         do {
             page = try NotesBridge.scanFolderPaths(
-                folderPaths, inAccount: account, from: from, to: to,
+                folders.map(\.path), inAccounts: folders.map(\.account), from: from, to: to,
                 useCreationDate: dateField == .created,
                 // Plaintext is one more Apple event per note, so it is only fetched when
                 // there is a query to match it against.
                 needsText: query?.isEmpty == false,
-                maxScan: scanCeiling)
+                maxScan: scanCeiling,
+                timeBudget: Double(budget.seconds) + Double(budget.attoseconds) / 1e18)
         } catch { throw storeFailure(error) }
 
         let scanned = page["scanned"] as? Int ?? 0
@@ -148,10 +148,9 @@ public struct ScriptingBridgeNoteStore: NoteStore {
                     isShared: raw["shared"] as? Bool ?? false))
         }
 
-        matches.sort { $0.modified > $1.modified }
-        return NoteSearchPage(
-            results: Array(matches.prefix(limit)), total: matches.count,
-            hitScanLimit: scanned >= scanCeiling)
+        return NoteScan(
+            matches: matches, scanned: scanned, hitScanLimit: page["hitLimit"] as? Bool ?? false,
+            reachedTimeLimit: page["timedOut"] as? Bool ?? false)
     }
 
     // MARK: One note
