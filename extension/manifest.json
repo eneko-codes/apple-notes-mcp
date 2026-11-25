@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "apple-notes-mcp",
   "display_name": "Apple Notes",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Read, search and write Apple Notes through the Notes app",
   "long_description": "A local MCP server written in Swift that gives Claude access to the Notes app on this Mac.\n\nNotes has no framework a separate process can use, so this server drives Notes.app itself through Apple events. Notes must be running, and the grant appears under System Settings → Privacy & Security → Automation.\n\nNotes are returned as plain text by default rather than HTML: it is what you actually want to read, and it costs a fraction of the tokens.\n\nupdate_note makes you say whether you are appending or replacing. Silently replacing a long note is the mistake worth designing against.\n\nTags and pinning are not here. Notes' scripting dictionary does not expose them at all — they need the Shortcuts server instead.\n\nNot affiliated with or endorsed by Apple Inc.",
   "author": {

@@ -1,5 +1,4 @@
 import Foundation
-import MCP
 import Testing
 
 @testable import NotesMCPCore
@@ -18,10 +17,10 @@ struct NoteToolsTests {
         let tools = NoteTools(
             store: store, calendar: Fixtures.calendar, configuration: configuration)
         let result = await tools.handle(.init(name: name, arguments: arguments))
-        guard case .text(let text, _, _) = result.content.first else {
+        guard case .text(let text) = result.content.first else {
             return ("(no text content)", true)
         }
-        return (text, result.isError ?? false)
+        return (text, result.isError)
     }
 
     private func stocked() -> FakeNoteStore {
